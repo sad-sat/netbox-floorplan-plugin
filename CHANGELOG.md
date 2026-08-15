@@ -1,0 +1,96 @@
+# Change Log
+
+## v0.10.0
+
+**Targets NetBox 4.7.** The supported range is declared as a minimum of 4.7.0 and a
+maximum of 4.7.99; see the [compatibility matrix](https://github.com/netbox-community/netbox-floorplan-plugin/blob/main/COMPATIBILITY.md)
+for earlier releases.
+
+### Breaking Changes
+
+* **The REST API now returns a `display` field** on both Floorplan and Floorplan Image.
+  This is additive — no fields were removed — and brings the serializers in line with
+  every other NetBox object.
+
+* **`?brief=1` on the Floorplan endpoint now returns a brief representation.** Previously
+  it returned every field, including the entire `canvas` document, because the serializer
+  declared no `brief_fields`. It now returns `id`, `url` and `display`. Clients relying on
+  `?brief=1` returning full objects must drop the parameter.
+
+### Bug Fixes
+
+* **Searching floorplans raised an error.** `FloorplanFilterSet.search()` filtered on a
+  `description` field, which `Floorplan` does not have — it extends `NetBoxModel`, and
+  only `PrimaryModel` provides `description`. Any `?q=` search therefore raised
+  `FieldError`. Search now matches the name of the assigned site or location.
+
+* **Comments on a Floorplan Image were silently discarded.** The form declared a
+  `comments` field and displayed it, but omitted it from `Meta.fields`, so anything
+  entered was thrown away on save.
+
+* **Site/location validation is now reported as a form error.** A floorplan must be
+  assigned to exactly one of a site or a location. This was enforced only in `save()` by
+  raising `ValueError`, which surfaced as a server error; it is now validated in `clean()`
+  and raises `ValidationError`, so the UI and REST API report it against the object.
+  `save()` retains its own guard for code paths which never call `clean()`.
+
+* **The size of an externally-linked image no longer errors.** `FloorplanImage.size`
+  built a list of expected exceptions and then caught `NameError` instead of using it. An
+  image with an external URL and no uploaded file has no file to measure, and Django
+  raises `ValueError` in that state, so the detail view failed to render.
+
+* **Rack and device names containing an apostrophe broke the floorplan editor.** The rack
+  and device pickers build JavaScript `onclick` handlers, and interpolated values directly.
+  Django escapes a quote to `&#x27;`, which the browser decodes back to a quote before the
+  JavaScript is parsed, so a rack named `O'Brien` produced a syntax error and the button
+  did nothing. Values are now escaped for JavaScript.
+
+* **Duplicate `comments` entry** removed from the Floorplan Image form fieldsets.
+
+### Other Changes
+
+* **Deprecated rack fields are no longer read directly.** `Rack.outer_width`,
+  `outer_depth` and `outer_unit` are deprecated in NetBox 4.7 and are to be inferred from
+  the rack's `RackType` in v5.0. The rack picker now resolves them from the `RackType`,
+  falling back to the Rack's own fields, so it keeps working once the fields are removed.
+  `rack_type` was added to the picker's `select_related()` to avoid a query per row.
+
+* **Removed `admin.py`.** NetBox has not included `django.contrib.admin` in
+  `INSTALLED_APPS` for several releases, so the module was never loaded.
+
+* Declared `python_requires=">=3.12"`, matching NetBox 4.7's supported Python versions.
+
+* Removed the invalid `min_version` and `max_version` arguments from `setup.py`, which
+  setuptools silently discarded. The supported NetBox range is declared in `PluginConfig`,
+  which is where it takes effect.
+
+* `netbox-plugin.yaml` backfilled with the 0.8.0, 0.9.0, 0.9.1 and 0.9.2 releases, which
+  were missing from the published compatibility manifest.
+
+* Corrected the tests badge in the README, which pointed at a repository that no longer
+  hosts this plugin.
+
+### Housekeeping
+
+* **Added a test suite** at `netbox_floorplan/tests/`, covering the models, the REST API,
+  the views, the filterset, and the template filters. Run it with `make test`.
+
+* **Added a development environment** under `develop/` — a Docker Compose stack of NetBox,
+  a worker, PostgreSQL and Redis — driven by a new `Makefile`.
+
+* **Added `CONTRIBUTING.md`**, documenting the development environment, the test workflow,
+  the query-count baseline workflow, and the plugin's conventions.
+
+* Documentation restructured into an MkDocs site.
+
+* Fixed the `manifest-modified` workflow, which still triggered on pushes to `master` and
+  so had stopped firing after the default branch was renamed to `main`.
+
+---
+
+## Earlier Releases
+
+Releases prior to v0.10.0 predate this change log. See the
+[GitHub releases page](https://github.com/netbox-community/netbox-floorplan-plugin/releases)
+and the [compatibility matrix](https://github.com/netbox-community/netbox-floorplan-plugin/blob/main/COMPATIBILITY.md)
+for their supported NetBox versions.
