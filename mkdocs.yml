@@ -43,6 +43,7 @@ nav:
     - Introduction: 'index.md'
     - Installation: 'installation.md'
     - Drawing a Floorplan: 'usage.md'
+    - Branching: 'branching.md'
     - Data Model:
         - Floorplan: 'models/floorplan.md'
         - Floorplan Image: 'models/floorplanimage.md'

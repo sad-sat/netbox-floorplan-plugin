@@ -13,6 +13,9 @@ This [NetBox](http://netboxlabs.com/oss/netbox/) plugin provides floorplan mappi
 
 See the [compatibility matrix](COMPATIBILITY.md) for supported NetBox versions, and the [changelog](CHANGELOG.md) for release notes.
 
+> [!TIP]
+> This plugin is compatible with [netbox-branching](https://github.com/netboxlabs/netbox-branching) out of the box. See [Branching](docs/branching.md) for three behaviours worth knowing before drawing floorplans inside branches.
+
 > [!IMPORTANT]
 > For racks to display at their true proportions, assign a rack type to the rack and set the outer width and depth on that type. Racks without those dimensions are drawn at a default size.
 
@@ -62,6 +65,7 @@ $ sudo systemctl restart netbox netbox-rq
 * [Introduction](docs/index.md) — what the plugin does and how a floorplan is put together
 * [Installation](docs/installation.md) — full installation guide
 * [Drawing a Floorplan](docs/usage.md) — the canvas editor, keyboard controls, and export
+* [Branching](docs/branching.md) — using floorplans with netbox-branching
 * [Data Model](docs/models/floorplan.md) — Floorplan and Floorplan Image
 * [REST API](docs/rest-api.md)
 * [Change Log](CHANGELOG.md)

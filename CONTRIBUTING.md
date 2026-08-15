@@ -130,6 +130,29 @@ make migrations
 This runs `makemigrations` inside the container and writes into
 `netbox_floorplan/migrations/`. Commit the generated file with the model change.
 
+### Data migrations and branching
+
+Schema-only migrations need nothing special. A migration that also *moves data* — a
+`RunPython` or `RunSQL` operation — must declare how it behaves inside a
+[netbox-branching](https://github.com/netboxlabs/netbox-branching) branch schema, by
+setting `fake_on_branch` on the `Migration` class:
+
+```python
+class Migration(migrations.Migration):
+    # Data already migrated in main; branch schemas inherit the result.
+    fake_on_branch = True
+```
+
+`True` always fakes the migration on a branch, `False` always runs it, and leaving it unset
+falls back to netbox-branching's heuristic. Set it explicitly rather than relying on the
+heuristic: a data migration that re-runs against a branch schema can operate on the wrong
+rows.
+
+All 13 existing migrations are schema-only, so none carries the flag.
+
+See [Branching](docs/branching.md) for the plugin's overall branching behaviour, including
+the fact that uploaded image files are not branched.
+
 ## Deprecated NetBox fields
 
 `Rack.outer_width`, `outer_depth` and `outer_unit` are deprecated as of NetBox 4.7 and
