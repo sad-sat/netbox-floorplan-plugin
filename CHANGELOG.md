@@ -35,6 +35,19 @@ for earlier releases.
     rewritten to paths, so no re-saving is required. Newly placed device images are stored
     relative, via Fabric's `srcFromAttribute`.
 
+* **Placed objects appeared shifted or compressed after reloading a floorplan**
+  ([#100](https://github.com/netbox-community/netbox-floorplan-plugin/issues/100)). The
+  background image was positioned from inside `loadFromJSON()`'s reviver, which Fabric calls
+  once per object *before* it has added any of them to the canvas. The code looked for the
+  floorplan boundary among the canvas objects to scale the background to it, never found one,
+  and fell back to scaling the background to the canvas and centring it — so the background no
+  longer lined up with the objects placed on it. It also started one image load per object,
+  racing them.
+
+    The background is now applied once, from the completion callback, when the boundary
+    genuinely exists. Zoom and resize also run after that rather than synchronously before the
+    canvas has been populated.
+
 * **Searching floorplans raised an error.** `FloorplanFilterSet.search()` filtered on a
   `description` field, which `Floorplan` does not have — it extends `NetBoxModel`, and
   only `PrimaryModel` provides `description`. Any `?q=` search therefore raised
@@ -70,6 +83,14 @@ for earlier releases.
   the rack's `RackType` in v5.0. The rack picker now resolves them from the `RackType`,
   falling back to the Rack's own fields, so it keeps working once the fields are removed.
   `rack_type` was added to the picker's `select_related()` to avoid a query per row.
+
+* **Renamed the vendored Fabric.js build to match its actual version.** The file was named
+  `fabric-js-6.0.2.js` but contained 5.2.1, which is materially misleading: Fabric v6 replaced
+  every callback API this plugin depends on — `loadFromJSON(json, callback, reviver)`,
+  `fabric.Image.fromURL(url, callback)`, `setBackgroundImage(img, callback, options)` — with
+  promises, so anyone consulting v6 documentation to reason about the editor was working from
+  the wrong API. It is now `fabric-js-5.2.1.js`, with the templates updated to match. No
+  library code changed.
 
 * **Removed `admin.py`.** NetBox has not included `django.contrib.admin` in
   `INSTALLED_APPS` for several releases, so the module was never loaded.

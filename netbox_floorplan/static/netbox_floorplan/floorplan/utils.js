@@ -267,6 +267,53 @@ function floorplan_image_url(assigned_image) {
 }
 
 
+// Fit the assigned background image to the floorplan.
+//
+// Must be called once the canvas is fully populated. The floorplan boundary is one of the
+// canvas objects, and the background is scaled and positioned to it; if the boundary cannot
+// be found the background is instead scaled to the canvas and centred, which does not line up
+// with the placed objects. Calling this from loadFromJSON's reviver — which runs per object,
+// before loadFromJSON has added anything to the canvas — is what caused placed objects to
+// appear shifted or compressed after a reload.
+function apply_background(canvas, floorplan, done) {
+    const finish = () => { if (done) { done(); } };
+
+    if (floorplan.assigned_image == null) {
+        canvas.setBackgroundImage(null, canvas.renderAll.bind(canvas));
+        finish();
+        return;
+    }
+
+    fabric.Image.fromURL(floorplan_image_url(floorplan.assigned_image), function (img) {
+        const boundary = canvas.getObjects().find(
+            (object) => object.custom_meta
+                && object.custom_meta.object_type == "floorplan_boundry"
+        );
+
+        if (boundary && boundary.width && boundary.height) {
+            canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
+                scaleX: boundary.width / img.width,
+                scaleY: boundary.height / img.height,
+                left: boundary.left,
+                top: boundary.top
+            });
+        } else {
+            const scale = Math.max(canvas.width / img.width, canvas.height / img.height);
+            canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
+                scaleX: scale,
+                scaleY: scale,
+                left: canvas.width / 2,
+                top: canvas.height / 2,
+                originX: 'middle',
+                originY: 'middle'
+            });
+        }
+
+        finish();
+    });
+}
+
+
 function init_floor_plan(floorplan_id, canvas, mode) {
 
     if (floorplan_id === undefined || floorplan_id === null || floorplan_id === "") {
@@ -279,63 +326,25 @@ function init_floor_plan(floorplan_id, canvas, mode) {
         floorplan.results.forEach((floorplan) => {
             target_image = floorplan.assigned_image
             const canvas_json = normalize_media_urls(floorplan.canvas, MEDIA_URL);
-            canvas.loadFromJSON(JSON.stringify(canvas_json), canvas.renderAll.bind(canvas), function (o, object) {
-                if (mode == "readonly") {
-                    object.set('selectable', false);
-                }
-                if (floorplan.assigned_image != null) {
-                    var img_url = floorplan_image_url(floorplan.assigned_image);
-
-
-                    var img = fabric.Image.fromURL(img_url, function(img) {
-                        var left = 0;
-                        var top = 0;
-                        var width = 0;
-                        var height = 0;
-                        canvas.getObjects().forEach(function (object) {
-                            if (object.custom_meta) {
-                                if (object.custom_meta.object_type == "floorplan_boundry") {
-                                    left = object.left;
-                                    top = object.top;
-                                    width = object.width;
-                                    height = object.height;
-                                }
-                            }
-                        });
-                        // if we have a floorplan boundary, position the image in there 
-                        if (height != 0 && width != 0) {
-                            let scaleRatioX = Math.max(width / img.width)
-                            let scaleRatioY = Math.max(height / img.height);
-                            canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
-                                scaleX: scaleRatioX,
-                                scaleY: scaleRatioY,
-                                left: left,
-                                top: top
-                            });     
-                        }
-                         else
-                        {
-                            let scaleRatio = Math.max(canvas.width / img.width, canvas.height / img.height);
-                            canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
-                                scaleX: scaleRatio,
-                                scaleY: scaleRatio,
-                                left: canvas.width / 2,
-                                top: canvas.height / 2,
-                                originX: 'middle',
-                                originY: 'middle'
-                            });
-                        }
+            canvas.loadFromJSON(
+                JSON.stringify(canvas_json),
+                // Completion: every object has been deserialised and added to the canvas, so
+                // the floorplan boundary now exists and the background can be fitted to it.
+                function () {
+                    apply_background(canvas, floorplan, function () {
+                        reset_zoom(canvas);
+                        resize_canvas(canvas, window);
+                        canvas.renderAll();
                     });
-                
-
-                } else {
-                    canvas.setBackgroundImage().renderAll();
+                },
+                // Reviver: called once per object, while the canvas is still empty.
+                function (o, object) {
+                    if (mode == "readonly") {
+                        object.set('selectable', false);
+                    }
                 }
-                canvas.renderAll();
-            });
+            );
         });
-        reset_zoom(canvas);
-        resize_canvas(canvas, window);
     }).fail(function (jq_xhr, text_status, error_thrown) {
         console.log(`error: ${error_thrown} - ${text_status}`);
     });

@@ -266,3 +266,50 @@ class DevicePickerImageUrlTestCase(TestCase):
         self.assertTrue(onclicks)
         for line in onclicks:
             self.assertNotIn('http://testserver', line)
+
+
+class VendoredAssetsTestCase(TestCase):
+    """
+    The canvas pages load their vendored libraries by filename, so a rename must be reflected
+    in the templates and the file must remain discoverable by staticfiles.
+
+    The Fabric build is pinned to 5.2.1: the plugin uses its callback APIs (loadFromJSON with a
+    reviver, fromURL with a callback, setBackgroundImage with a callback), all of which became
+    promise-based in v6. The filename previously claimed 6.0.2 while containing 5.2.1.
+    """
+    user_permissions = ()
+
+    FABRIC = 'netbox_floorplan/vendors/fabric-js-5.2.1.js'
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.site = Site.objects.create(name='Site 1', slug='site-1')
+        cls.floorplan = Floorplan.objects.create(site=cls.site)
+
+    def test_vendored_fabric_is_discoverable(self):
+        from django.contrib.staticfiles import finders
+        self.assertIsNotNone(
+            finders.find(self.FABRIC),
+            f'{self.FABRIC} was not found by staticfiles',
+        )
+
+    def test_vendored_fabric_filename_matches_the_version_inside(self):
+        import re
+        from django.contrib.staticfiles import finders
+        with open(finders.find(self.FABRIC)) as f:
+            head = f.read(200)
+        version = re.search(r'version:"([0-9.]+)"', head).group(1)
+        self.assertIn(version, self.FABRIC)
+
+    def test_editor_references_the_vendored_fabric(self):
+        response = self.client.get(
+            reverse('plugins:netbox_floorplan:floorplan_edit', args=[self.floorplan.pk])
+        )
+        self.assertHttpStatus(response, 200)
+        self.assertIn('fabric-js-5.2.1.js', response.content.decode())
+
+    def test_site_tab_references_the_vendored_fabric(self):
+        self.add_permissions('dcim.view_site', 'netbox_floorplan.view_floorplan')
+        response = self.client.get(reverse('dcim:site_floorplans', args=[self.site.pk]))
+        self.assertHttpStatus(response, 200)
+        self.assertIn('fabric-js-5.2.1.js', response.content.decode())
