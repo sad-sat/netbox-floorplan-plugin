@@ -108,17 +108,17 @@ class FloorplanMapEditView(LoginRequiredMixin, View):
 class FloorplanRackListView(generic.ObjectListView):
     # Grab the dcim/rack data from Netbox as well as the associated dcim/rack-role data if
     # the rack role is set
-    queryset = Rack.objects.all().select_related("role")
+    queryset = Rack.objects.all().select_related("role", "rack_type")
     table = tables.FloorplanRackTable
 
     def get(self, request):
         fp_id = request.GET["floorplan_id"]
         fp_instance = models.Floorplan.objects.get(pk=fp_id)
         if fp_instance.record_type == "site":
-            self.queryset = Rack.objects.all().select_related("role").filter(~Q(id__in=fp_instance.mapped_racks)).filter(
+            self.queryset = Rack.objects.all().select_related("role", "rack_type").filter(~Q(id__in=fp_instance.mapped_racks)).filter(
                 site=fp_instance.site.id).order_by("name")
         else:
-            self.queryset = Rack.objects.all().select_related("role").filter(~Q(id__in=fp_instance.mapped_racks)).filter(
+            self.queryset = Rack.objects.all().select_related("role", "rack_type").filter(~Q(id__in=fp_instance.mapped_racks)).filter(
                 location=fp_instance.location.id).order_by("name")
         return super().get(request)
 
