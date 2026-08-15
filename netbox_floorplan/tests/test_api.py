@@ -23,7 +23,7 @@ class FloorplanImageTest(
 ):
     model = FloorplanImage
     view_namespace = 'plugins-api:netbox_floorplan'
-    brief_fields = ['display', 'external_url', 'file', 'filename', 'id', 'name', 'url']
+    brief_fields = ['display', 'external_url', 'file', 'file_url', 'filename', 'id', 'name', 'url']
 
     create_data = [
         {'name': 'Image 4', 'external_url': 'https://example.com/4.png'},
@@ -105,3 +105,54 @@ class FloorplanValidationAPITest(APITestCase):
         response = self._post({})
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Floorplan.objects.count(), 0)
+
+
+class FloorplanImageFileUrlTest(APITestCase):
+    """
+    `file_url` renders the storage backend's URL rather than an absolute URL built from the
+    request, so a floorplan loads correctly when NetBox is reached through a different
+    hostname than the one that served the API call (a reverse proxy).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.uploaded = FloorplanImage.objects.create(
+            name='Uploaded', file='netbox-floorplan/plan.png'
+        )
+        cls.linked = FloorplanImage.objects.create(
+            name='Linked', external_url='https://files.example.com/plan.png'
+        )
+
+    def _get(self, instance, host='netbox.internal:8001'):
+        self.add_permissions('netbox_floorplan.view_floorplanimage')
+        url = reverse(
+            'plugins-api:netbox_floorplan-api:floorplanimage-detail', kwargs={'pk': instance.pk}
+        )
+        return self.client.get(url, HTTP_HOST=host, **self.header).data
+
+    def test_file_is_absolute_and_carries_the_request_host(self):
+        # DRF's default representation, retained for API compatibility.
+        data = self._get(self.uploaded)
+        self.assertTrue(data['file'].startswith('http'))
+        self.assertIn('netbox.internal', data['file'])
+
+    def test_file_url_is_relative_for_local_storage(self):
+        data = self._get(self.uploaded)
+        self.assertTrue(data['file_url'].startswith('/'))
+        self.assertNotIn('netbox.internal', data['file_url'])
+        self.assertNotIn('http', data['file_url'])
+
+    def test_file_url_does_not_change_with_the_request_host(self):
+        # The point of the field: the value must not depend on how NetBox was addressed.
+        first = self._get(self.uploaded, host='netbox.internal:8001')['file_url']
+        second = self._get(self.uploaded, host='netbox.example.com')['file_url']
+        self.assertEqual(first, second)
+
+    def test_file_url_points_at_the_same_path_as_file(self):
+        data = self._get(self.uploaded)
+        self.assertTrue(data['file'].endswith(data['file_url']))
+
+    def test_file_url_is_none_when_there_is_no_file(self):
+        data = self._get(self.linked)
+        self.assertIsNone(data['file_url'])
+        self.assertEqual(data['external_url'], 'https://files.example.com/plan.png')

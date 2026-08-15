@@ -86,8 +86,8 @@ class FloorplanDeviceTable(NetBoxTable):
     actions = tables.TemplateColumn(template_code="""
     {% load template_utils %}
     <div class="btn-group" role="group">
-        <a type="button" class="btn btn-sm btn-outline-secondary" onclick="add_floorplan_object_simple(30, 50, 60, 60, null, '#000000', 30, {{ record.id|js_str }}, {{ record.name|js_str }}, 'device', {{ record.status|js_str }}, {% if record.device_type.front_image %}{{ record.device_type.front_image|js_str }}{% else %}null{% endif %})">Simple<br>Device</a>
-        <a type="button" class="btn btn-sm btn-outline-info ms-1" onclick="add_floorplan_object_advanced(30, 50, 60, 60, null, '#000000', 30, {{ record.id|js_str }}, {{ record.name|js_str }}, 'device', {{ record.status|js_str }}, {% if record.tenant %}{{ record.tenant|js_str }}{% else %}null{% endif %}, null, {% if record.device_type.front_image %}{{ record.device_type.front_image|js_str }}{% else %}null{% endif %}, '#6ea8fe')">Advanced<br>Device</a>
+        <a type="button" class="btn btn-sm btn-outline-secondary" onclick="add_floorplan_object_simple(30, 50, 60, 60, null, '#000000', 30, {{ record.id|js_str }}, {{ record.name|js_str }}, 'device', {{ record.status|js_str }}, {% if record.device_type.front_image %}{{ record.device_type.front_image.url|js_str }}{% else %}null{% endif %})">Simple<br>Device</a>
+        <a type="button" class="btn btn-sm btn-outline-info ms-1" onclick="add_floorplan_object_advanced(30, 50, 60, 60, null, '#000000', 30, {{ record.id|js_str }}, {{ record.name|js_str }}, 'device', {{ record.status|js_str }}, {% if record.tenant %}{{ record.tenant|js_str }}{% else %}null{% endif %}, null, {% if record.device_type.front_image %}{{ record.device_type.front_image.url|js_str }}{% else %}null{% endif %}, '#6ea8fe')">Advanced<br>Device</a>
     </div>
     """, orderable=False)
 

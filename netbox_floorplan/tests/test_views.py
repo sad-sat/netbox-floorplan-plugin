@@ -178,3 +178,91 @@ class FloorplanObjectListViewsTestCase(TestCase):
         url = reverse('plugins:netbox_floorplan:floorplan_device_list')
         response = self.client.get(f'{url}?floorplan_id={self.floorplan.pk}')
         self.assertHttpStatus(response, 200)
+
+
+class MediaUrlExposureTestCase(TestCase):
+    """
+    The canvas needs NetBox's MEDIA_URL, so the templates publish it from Django settings
+    rather than the JavaScript assuming /media/.
+    """
+    user_permissions = ()
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.site = Site.objects.create(name='Site 1', slug='site-1')
+        cls.floorplan = Floorplan.objects.create(site=cls.site)
+
+    def test_editor_publishes_media_url(self):
+        from django.conf import settings
+        response = self.client.get(
+            reverse('plugins:netbox_floorplan:floorplan_edit', args=[self.floorplan.pk])
+        )
+        self.assertHttpStatus(response, 200)
+        content = response.content.decode()
+        self.assertIn('window.NETBOX_MEDIA_URL', content)
+        self.assertIn(f'window.NETBOX_MEDIA_URL = "{settings.MEDIA_URL}"', content)
+
+    def test_media_url_is_published_before_the_module_script(self):
+        # The module reads the global at import time, so ordering matters.
+        response = self.client.get(
+            reverse('plugins:netbox_floorplan:floorplan_edit', args=[self.floorplan.pk])
+        )
+        content = response.content.decode()
+        self.assertLess(
+            content.index('window.NETBOX_MEDIA_URL'),
+            content.index('floorplan/edit.js'),
+        )
+
+    def test_site_tab_publishes_media_url(self):
+        from django.conf import settings
+        self.add_permissions('dcim.view_site', 'netbox_floorplan.view_floorplan')
+        response = self.client.get(reverse('dcim:site_floorplans', args=[self.site.pk]))
+        self.assertHttpStatus(response, 200)
+        self.assertIn(f'window.NETBOX_MEDIA_URL = "{settings.MEDIA_URL}"', response.content.decode())
+
+
+class DevicePickerImageUrlTestCase(TestCase):
+    """
+    The device picker passes the storage backend's URL for a device type's front image, so
+    the JavaScript does not have to prepend a hardcoded media prefix.
+    """
+    user_permissions = ()
+
+    @classmethod
+    def setUpTestData(cls):
+        from dcim.models import DeviceRole, DeviceType, Manufacturer
+        cls.site = Site.objects.create(name='Site 1', slug='site-1')
+        cls.floorplan = Floorplan.objects.create(site=cls.site)
+        manufacturer = Manufacturer.objects.create(name='Manufacturer 1', slug='manufacturer-1')
+        cls.device_type = DeviceType.objects.create(
+            manufacturer=manufacturer, model='Model 1', slug='model-1',
+            front_image='devicetype-images/front.png',
+        )
+        role = DeviceRole.objects.create(name='Role 1', slug='role-1')
+        from dcim.models import Device
+        cls.device = Device.objects.create(
+            name='device-1', site=cls.site, device_type=cls.device_type, role=role
+        )
+
+    def test_picker_emits_the_storage_url(self):
+        from django.conf import settings
+        self.add_permissions('dcim.view_device')
+        url = reverse('plugins:netbox_floorplan:floorplan_device_list')
+        response = self.client.get(f'{url}?floorplan_id={self.floorplan.pk}')
+        self.assertHttpStatus(response, 200)
+        content = response.content.decode()
+        # The picker emits the storage URL, not the bare stored name. Compare through js_str,
+        # which is what escapes the value into the onclick handler.
+        from netbox_floorplan.templatetags.template_utils import js_str
+        self.assertIn(js_str(f"{settings.MEDIA_URL}devicetype-images/front.png"), content)
+        self.assertNotIn(js_str("devicetype-images/front.png"), content)
+
+    def test_picker_emits_no_absolute_host(self):
+        self.add_permissions('dcim.view_device')
+        url = reverse('plugins:netbox_floorplan:floorplan_device_list')
+        response = self.client.get(f'{url}?floorplan_id={self.floorplan.pk}')
+        content = response.content.decode()
+        onclicks = [line for line in content.splitlines() if 'add_floorplan_object' in line]
+        self.assertTrue(onclicks)
+        for line in onclicks:
+            self.assertNotIn('http://testserver', line)

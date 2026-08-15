@@ -19,6 +19,22 @@ for earlier releases.
 
 ### Bug Fixes
 
+* **Floorplan images failed to load behind a reverse proxy**
+  ([#96](https://github.com/netbox-community/netbox-floorplan-plugin/issues/96)). The API
+  serialised the uploaded file as an absolute URL built from the request, so the hostname
+  NetBox saw was baked into the page and into saved canvases. Where that hostname differs
+  from the one the browser uses — the usual arrangement behind a reverse proxy — images 404.
+
+    A new read-only `file_url` field renders the URL with the storage backend instead:
+    `MEDIA_URL`-relative for local storage, so the browser resolves it against whatever
+    origin it is actually using, and absolute for remote storage (S3, a CDN), so those
+    deployments are unaffected. The canvas now uses this field. `file` keeps its existing
+    absolute form, so API consumers are unchanged.
+
+    Existing floorplans are repaired on load: absolute media URLs in a stored canvas are
+    rewritten to paths, so no re-saving is required. Newly placed device images are stored
+    relative, via Fabric's `srcFromAttribute`.
+
 * **Searching floorplans raised an error.** `FloorplanFilterSet.search()` filtered on a
   `description` field, which `Floorplan` does not have — it extends `NetBoxModel`, and
   only `PrimaryModel` provides `description`. Any `?q=` search therefore raised

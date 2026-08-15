@@ -291,6 +291,10 @@
     </div>
 </div>
 
+<script>
+  // MEDIA_URL from NetBox settings, so the canvas does not have to assume /media/.
+  window.NETBOX_MEDIA_URL = "{{ MEDIA_URL|escapejs }}";
+</script>
 <script type="module" src="{% static 'netbox_floorplan/floorplan/edit.js' %}"></script>
 
 {% endblock content %}
