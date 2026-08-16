@@ -19,6 +19,20 @@ for earlier releases.
 
 ### Bug Fixes
 
+* **The floorplan image detail page no longer renders a broken link.** Its first row printed
+  `{ object.access_list.get_absolute_url }` — single braces, so Django never evaluated it and
+  the literal text ended up in the `href` — against a field belonging to a different plugin
+  entirely, which this one has never had. The row displayed the object's own ID and led
+  nowhere; it is gone, and the ID remains visible in the page header as NetBox shows it for
+  every object.
+
+* **Fixed the unbalanced markup on the same page**, where the column `div` closed before the
+  tags and comments panels, leaving them outside the column they were meant to sit in.
+
+* **The floorplan action buttons now resolve their URLs through `{% url %}`.** They were
+  hardcoded to `/plugins/floorplan/...`, which is wrong for any NetBox deployed under a
+  `BASE_PATH`.
+
 * **Floorplan images failed to load behind a reverse proxy**
   ([#96](https://github.com/netbox-community/netbox-floorplan-plugin/issues/96)). The API
   serialised the uploaded file as an absolute URL built from the request, so the hostname
@@ -77,6 +91,26 @@ for earlier releases.
 * **Duplicate `comments` entry** removed from the Floorplan Image form fieldsets.
 
 ### Other Changes
+
+* **The object views now use NetBox's declarative UI components instead of templates.** The
+  floorplan tab on sites and locations, and the floorplan image detail page, declare a
+  `layout` built from `netbox.ui` panels. The image's attribute table is now an
+  `ObjectAttributesPanel` in `netbox_floorplan/ui/panels.py`, and its template is gone.
+
+    The canvas stays a template, since a Fabric.js drawing surface has no declarative
+  equivalent, but it is now a `TemplatePanel` — so the page chrome around it comes from the
+  layout rather than from hand-written `content` and `breadcrumbs` blocks.
+  `floorplan_view.html` keeps only the two asset blocks a panel cannot reach: the Fabric.js
+  and jQuery includes, and the canvas stylesheet and module script.
+
+    Breadcrumbs come from the layout. The site tab keeps the region and site-group ancestor
+  trail the template built by hand, and the location tab now shows its location ancestors,
+  matching NetBox's own location view — the template checked for a region and a group, which
+  a location does not have, so it never rendered anything extra there.
+
+* **Removed two dead templates**, `floorplan.html` and `floorplan_list.html`. Neither was
+  referenced from any view, URL or template: `Floorplan.get_absolute_url()` points at the
+  editor, and no detail view is registered for the model.
 
 * **Deprecated rack fields are no longer read directly.** `Rack.outer_width`,
   `outer_depth` and `outer_unit` are deprecated in NetBox 4.7 and are to be inferred from
