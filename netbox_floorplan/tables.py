@@ -37,10 +37,9 @@ class FloorplanRackTable(NetBoxTable):
     embedded = True
 
     role = tables.TemplateColumn(
-        # Show the role name if it exists, otherwise show "None" on the edit_floorplan view
         template_code="""
         {% if record.role %}
-            {{ record.role.name }}
+            <span class="badge" style="background-color: #{{ record.role.color }}; color: #fff;">{{ record.role.name }}</span>
         {% else %}
             <span class="text-muted">None</span>
         {% endif %}
@@ -50,24 +49,18 @@ class FloorplanRackTable(NetBoxTable):
 
     actions = tables.TemplateColumn(template_code="""
     <div class="btn-group" role="group">
-        {% if record.role and record.role.color %}
-        <a type="button" class="btn btn-sm btn-outline-secondary" onclick="add_floorplan_object_simple(300, 500, {% if record.outer_width %}{{ record.outer_width }}{% else %}null{% endif %}, {% if record.outer_depth %}{{ record.outer_depth }}{% else %}null{% endif %}, {% if record.outer_unit %}'{{ record.outer_unit }}'{% else %}null{% endif %}, '#000000', 30, '{{ record.id }}', '{{ record.name }}', 'rack', '{{ record.status }}', null)">Simple<br>Rack</a>
-        <a type="button" class="btn btn-sm btn-outline-info ms-1" onclick="add_floorplan_object_advanced(300, 500, {% if record.outer_width %}{{ record.outer_width }}{% else %}null{% endif %}, {% if record.outer_depth %}{{ record.outer_depth }}{% else %}null{% endif %}, {% if record.outer_unit %}'{{ record.outer_unit }}'{% else %}null{% endif %}, '#{{ record.role.color }}', 30, '{{ record.id }}', '{{ record.name }}', 'rack', '{{ record.status }}', {% if record.tenant %}'{{ record.tenant }}'{% else %}null{% endif %}, '{{ record.role.name }}', null, '#000000')">Advanced<br>Rack</a>
-        {% else %}
-        <a type="button" class="btn btn-sm btn-outline-secondary" onclick="add_floorplan_object_simple(300, 500, {% if record.outer_width %}{{ record.outer_width }}{% else %}null{% endif %}, {% if record.outer_depth %}{{ record.outer_depth }}{% else %}null{% endif %}, {% if record.outer_unit %}'{{ record.outer_unit }}'{% else %}null{% endif %}, '#000000', 30, '{{ record.id }}', '{{ record.name }}', 'rack', '{{ record.status }}', null)">Simple<br>Rack</a>
-        <a type="button" class="btn btn-sm btn-outline-info ms-1" onclick="add_floorplan_object_advanced(300, 500, {% if record.outer_width %}{{ record.outer_width }}{% else %}null{% endif %}, {% if record.outer_depth %}{{ record.outer_depth }}{% else %}null{% endif %}, {% if record.outer_unit %}'{{ record.outer_unit }}'{% else %}null{% endif %}, '#000000', 30, '{{ record.id }}', '{{ record.name }}', 'rack', '{{ record.status }}', {% if record.tenant %}'{{ record.tenant }}'{% else %}null{% endif %}, 'None', null, '#000000')">Advanced<br>Rack</a>
-        {% endif %}
+        <button type="button" class="btn btn-sm btn-primary" onclick="add_custom_floorplan_rack('{{ record.id }}', '{{ record.name|escapejs }}', '{{ record.status }}', {% if record.outer_width %}{{ record.outer_width }}{% else %}600{% endif %}, {% if record.outer_depth %}{{ record.outer_depth }}{% else %}800{% endif %}, '{{ record.outer_unit|default:'mm' }}', '{{ record.role.name|default:''|escapejs }}', '{{ record.role.color|default:'2563eb' }}', '{{ record.u_height }}U')">
+            <span class="mdi mdi-plus-box"></span> افزودن رک به نقشه
+        </button>
     </div>
     """, orderable=False)
 
     @cached_property
     def htmx_url(self):
-        # no need to check for embedded as this table is always embedded
         return "/plugins/floorplan/floorplans/racks/"
 
     class Meta(NetBoxTable.Meta):
         model = Rack
-        # Show the Rack name, role, and U-height in the table
         fields = ('pk', 'name', 'role', 'u_height')
         default_columns = ('pk', 'name', 'role', 'u_height')
         row_attrs = {
@@ -79,22 +72,33 @@ class FloorplanDeviceTable(NetBoxTable):
     name = tables.LinkColumn()
     embedded = True
 
+    role = tables.TemplateColumn(
+        template_code="""
+        {% if record.role %}
+            <span class="badge" style="background-color: #{{ record.role.color }}; color: #fff;">{{ record.role.name }}</span>
+        {% else %}
+            <span class="text-muted">None</span>
+        {% endif %}
+        """,
+        verbose_name="Role"
+    )
+
     actions = tables.TemplateColumn(template_code="""
     <div class="btn-group" role="group">
-        <a type="button" class="btn btn-sm btn-outline-secondary" onclick="add_floorplan_object_simple(30, 50, 60, 60, null, '#000000', 30, '{{ record.id }}', '{{ record.name }}', 'device', '{{ record.status }}', {% if record.device_type.front_image %}'{{ record.device_type.front_image }}'{% else %}null{% endif %})">Simple<br>Device</a>
-        <a type="button" class="btn btn-sm btn-outline-info ms-1" onclick="add_floorplan_object_advanced(30, 50, 60, 60, null, '#000000', 30, '{{ record.id }}', '{{ record.name }}', 'device', '{{ record.status }}', {% if record.tenant %}'{{ record.tenant }}'{% else %}null{% endif %}, null, {% if record.device_type.front_image %}'{{ record.device_type.front_image }}'{% else %}null{% endif %}, '#6ea8fe')">Advanced<br>Device</a>
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="add_custom_floorplan_device('{{ record.id }}', '{{ record.name|escapejs }}', '{{ record.role.slug|default:'' }}', '{{ record.status }}', '{{ record.device_type.model|escapejs }}')">
+            <span class="mdi mdi-plus-box"></span> افزودن به نقشه
+        </button>
     </div>
     """, orderable=False)
 
     @cached_property
     def htmx_url(self):
-        # no need to check for embedded as this table is always embedded
         return "/plugins/floorplan/floorplans/devices/"
 
     class Meta(NetBoxTable.Meta):
         model = Device
-        fields = ('pk', 'name', 'device_type')
-        default_columns = ('pk', 'name', 'device_type')
+        fields = ('pk', 'name', 'role', 'device_type')
+        default_columns = ('pk', 'name', 'role', 'device_type')
         row_attrs = {
             'id': lambda record: 'object_device_{}'.format(record.pk),
         }

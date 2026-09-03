@@ -59,6 +59,39 @@ function reset_zoom(canvas) {
 
 function export_svg(canvas) {
     var filedata = canvas.toSVG();
+    var bg = canvas.backgroundImage;
+    if (bg && bg._element) {
+        try {
+            var imgEl = bg._element;
+            var tempCanvas = document.createElement('canvas');
+            tempCanvas.width = imgEl.naturalWidth || imgEl.width;
+            tempCanvas.height = imgEl.naturalHeight || imgEl.height;
+            var ctx = tempCanvas.getContext('2d');
+            ctx.drawImage(imgEl, 0, 0);
+            var dataUrl = tempCanvas.toDataURL('image/png');
+            
+            var imgSrc = imgEl.src;
+            if (imgSrc && filedata.indexOf(imgSrc) !== -1) {
+                filedata = filedata.split(imgSrc).join(dataUrl);
+            } else if (filedata.indexOf('xlink:href="data:image') === -1) {
+                var bgLeft = (bg.left !== undefined) ? bg.left : 0;
+                var bgTop = (bg.top !== undefined) ? bg.top : 0;
+                var bgW = (bg.width || imgEl.naturalWidth || 800) * (bg.scaleX || 1);
+                var bgH = (bg.height || imgEl.naturalHeight || 600) * (bg.scaleY || 1);
+                if (bg.originX === 'middle' || bg.originX === 'center') {
+                    bgLeft -= bgW / 2;
+                }
+                if (bg.originY === 'middle' || bg.originY === 'center') {
+                    bgTop -= bgH / 2;
+                }
+                var bgTag = '\t<image xlink:href="' + dataUrl + '" x="' + bgLeft + '" y="' + bgTop + '" width="' + bgW + '" height="' + bgH + '" />\n';
+                var insertPos = filedata.indexOf('>') + 1;
+                filedata = filedata.slice(0, insertPos) + '\n' + bgTag + filedata.slice(insertPos);
+            }
+        } catch (err) {
+            console.warn('Could not embed background image into SVG:', err);
+        }
+    }
     var locfile = new Blob([filedata], { type: "image/svg+xml;charset=utf-8" });
     var locfilesrc = URL.createObjectURL(locfile);
     var link = document.createElement('a');
@@ -66,7 +99,6 @@ function export_svg(canvas) {
     link.href = locfilesrc;
     link.download = "floorplan.svg";
     link.click();
-    // Clean up the URL object to prevent memory leaks
     setTimeout(function() {
         URL.revokeObjectURL(locfilesrc);
     }, 100);
@@ -214,7 +246,7 @@ function init_floor_plan(floorplan_id, canvas, mode) {
     }
 
     var target_image = 0;
-    const floorplan_call = $.get(`/api/plugins/floorplan/floorplans/?id=${floorplan_id}`);
+    const floorplan_call = $.ajax({ url: `/api/plugins/floorplan/floorplans/?id=${floorplan_id}`, cache: false });
     floorplan_call.done(function (floorplan) {
         floorplan.results.forEach((floorplan) => {
             target_image = floorplan.assigned_image
@@ -228,6 +260,10 @@ function init_floor_plan(floorplan_id, canvas, mode) {
                         img_url = floorplan.assigned_image.external_url;
                     } else {
                         img_url = floorplan.assigned_image.file;
+                        try {
+                            var _u = new URL(img_url, window.location.origin);
+                            img_url = _u.pathname + _u.search;
+                        } catch (e) {}
                     }
 
 
@@ -259,14 +295,14 @@ function init_floor_plan(floorplan_id, canvas, mode) {
                         }
                          else
                         {
-                            let scaleRatio = Math.max(canvas.width / img.width, canvas.height / img.height);
+                            // Fixed anchor at (0, 0) with 1:1 scale so rack positions stay 100% pinned to the blueprint in all views
                             canvas.setBackgroundImage(img, canvas.renderAll.bind(canvas), {
-                                scaleX: scaleRatio,
-                                scaleY: scaleRatio,
-                                left: canvas.width / 2,
-                                top: canvas.height / 2,
-                                originX: 'middle',
-                                originY: 'middle'
+                                scaleX: 1,
+                                scaleY: 1,
+                                left: 0,
+                                top: 0,
+                                originX: 'left',
+                                originY: 'top'
                             });
                         }
                     });

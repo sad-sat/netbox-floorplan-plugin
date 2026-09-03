@@ -119,6 +119,9 @@
                                             Add Label
                                         </a>
                                         <a class="btn btn-outline-info tools disabled" onclick="lock_floorplan_object()" id="lock_button">Lock/Unlock Object
+                                        <button type="button" id="open_device_btn" class="btn btn-warning" onclick="open_device_cables()" style="font-weight: bold;" title="مشاهده صفحه دیوایس و اتصال کابل‌ها">
+                                            <span class="mdi mdi-open-in-new" aria-hidden="true"></span> اتصالات کابل
+                                        </button>
                                         </a>
                                         <a class="btn btn-outline-danger tools disabled"
                                             onclick="delete_floorplan_object()" id="remove_button">
@@ -291,6 +294,6 @@
     </div>
 </div>
 
-<script type="module" src="{% static 'netbox_floorplan/floorplan/edit.js' %}"></script>
+<script type="module" src="{% static 'netbox_floorplan/floorplan/edit.js' %}?v=20260903_09"></script>
 
 {% endblock content %}

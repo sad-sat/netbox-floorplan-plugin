@@ -13,7 +13,7 @@ import {
     move_pan,
     reset_zoom,
     init_floor_plan
-} from "/static/netbox_floorplan/floorplan/utils.js";
+} from "./utils.js";
 
 
 var csrf = document.getElementById('csrf').value;
@@ -40,6 +40,7 @@ var canvas = new fabric.Canvas('canvas'),
     canvasHeight = document.getElementById('canvas').height;
 
 window.canvas = canvas;
+window.fabricCanvas = canvas;
 
 // end initial ----------------------------------------------------------------------------- !
 
@@ -66,6 +67,10 @@ canvas.on('object:moving', function (options) {
         left: Math.round(options.target.left / grid) * grid,
         top: Math.round(options.target.top / grid) * grid
     });
+});
+
+canvas.on('object:modified', function (options) {
+    save_floorplan();
 });
 
 // end grid ----------------------------------------------------------------------------- !
@@ -1255,7 +1260,8 @@ document.addEventListener('keydown', function (e) {
 // start save floorplan ----------------------------------------------------------------------------- !
 
 function save_floorplan() {
-    var floor_json = canvas.toJSON(["id", "text", "_controlsVisibility", "custom_meta", "lockMovementY", "lockMovementX", "evented", "selectable"]);
+    var c = window.fabricCanvas || canvas;
+    var floor_json = c.toJSON(["id", "text", "_controlsVisibility", "custom_meta", "lockMovementY", "lockMovementX", "evented", "selectable"]);
     $.ajax({
         type: "PATCH",
         url: `/api/plugins/floorplan/floorplans/${obj_pk}/`,
@@ -1267,6 +1273,17 @@ function save_floorplan() {
         data: JSON.stringify({
             "canvas": floor_json,
         }),
+        success: function () {
+            var saveBtn = document.querySelector('a.btn-primary[onclick*="save_and_redirect"]');
+            if (saveBtn) {
+                var origText = saveBtn.dataset.origText || saveBtn.innerText;
+                saveBtn.dataset.origText = origText;
+                saveBtn.innerText = "ذخیره شد ✓";
+                setTimeout(function() {
+                    saveBtn.innerText = origText;
+                }, 1500);
+            }
+        },
         error: function (err) {
             console.log(`Error: ${err}`);
         }
@@ -1274,7 +1291,8 @@ function save_floorplan() {
 }
 
 function save_and_redirect() {
-    var floor_json = canvas.toJSON(["id", "text", "_controlsVisibility", "custom_meta", "lockMovementY", "lockMovementX", "evented", "selectable"]);
+    var c = window.fabricCanvas || canvas;
+    var floor_json = c.toJSON(["id", "text", "_controlsVisibility", "custom_meta", "lockMovementY", "lockMovementX", "evented", "selectable"]);
     $.ajax({
         type: "PATCH",
         url: `/api/plugins/floorplan/floorplans/${obj_pk}/`,
@@ -1308,3 +1326,443 @@ document.addEventListener("DOMContentLoaded", function() {
     init_floor_plan(obj_pk, canvas, "edit");
 });
 // end initialize load ----------------------------------------------------------------------------- !
+
+
+function open_device_cables() {
+    var c = window.fabricCanvas || (window.canvas && typeof window.canvas.getObjects === 'function' ? window.canvas : null);
+    if (!c && typeof canvas !== 'undefined' && typeof canvas.getObjects === 'function') {
+        c = canvas;
+    }
+
+    var target = null;
+    if (c && typeof c.getActiveObject === 'function') {
+        var active = c.getActiveObject();
+        if (active && active.custom_meta) {
+            target = active;
+        }
+    }
+
+    if (!target && c && typeof c.getObjects === 'function') {
+        var objs = c.getObjects();
+        target = objs.find(function(o) {
+            return o.custom_meta && (o.custom_meta.object_type === 'device' || o.custom_meta.object_type === 'keystone');
+        });
+        if (!target) {
+            target = objs.find(function(o) {
+                return o.custom_meta && o.custom_meta.object_type === 'rack';
+            });
+        }
+    }
+
+    if (!target || !target.custom_meta) {
+        alert("هیچ تجهیز یا کیستونی روی نقشه انتخاب نشده است.");
+        return;
+    }
+
+    var meta = target.custom_meta;
+    var url = meta.object_url;
+    var objId = meta.object_id;
+    var objType = meta.object_type;
+
+    if (!url && objId) {
+        url = (objType === 'rack' ? '/dcim/racks/' : '/dcim/devices/') + objId + '/';
+    }
+
+    if (url) {
+        if (objType === 'device' && !url.includes('/interfaces/')) {
+            url = url.replace(/\/$/, '') + '/interfaces/';
+        }
+        window.location.href = url;
+    } else {
+        alert("آدرس اتصالات برای این تجهیز یافت نشد.");
+    }
+}
+window.open_device_cables = open_device_cables;
+
+
+function add_custom_floorplan_device(objectId, objectName, roleSlug, status, deviceModel) {
+    var c = window.fabricCanvas || (window.canvas && typeof window.canvas.getObjects === 'function' ? window.canvas : null);
+    if (!c && typeof canvas !== 'undefined') c = canvas;
+    if (!c) return;
+
+    var slug = (roleSlug || '').toLowerCase();
+    var nameLower = (objectName || '').toLowerCase();
+    var modelLower = (deviceModel || '').toLowerCase();
+
+    var iconShapes = [];
+    var badgeOffsetY = 30;
+
+    var shadow = new fabric.Shadow({
+        color: 'rgba(0, 0, 0, 0.25)',
+        blur: 5,
+        offsetX: 1,
+        offsetY: 2
+    });
+
+    if (slug.includes('wireless') || slug.includes('ap') || slug.includes('wifi') || modelLower.includes('u6') || modelLower.includes('ap')) {
+        // 1. WIRELESS ACCESS POINT (AP)
+        var base = new fabric.Circle({
+            radius: 20,
+            fill: '#ffffff',
+            stroke: '#0284c7',
+            strokeWidth: 2.5,
+            originX: 'center',
+            originY: 'center',
+            shadow: shadow
+        });
+        var ring = new fabric.Circle({
+            radius: 13,
+            fill: '#f0f9ff',
+            stroke: '#38bdf8',
+            strokeWidth: 1,
+            originX: 'center',
+            originY: 'center'
+        });
+        var led = new fabric.Circle({
+            radius: 3.5,
+            fill: status === 'active' ? '#10b981' : '#f59e0b',
+            originX: 'center',
+            originY: 'center'
+        });
+        var wifiText = new fabric.Text('AP', {
+            fontSize: 8,
+            fontFamily: 'sans-serif',
+            fontWeight: 'bold',
+            fill: '#0284c7',
+            top: -7,
+            originX: 'center',
+            originY: 'center'
+        });
+        iconShapes = [base, ring, led, wifiText];
+        badgeOffsetY = 28;
+
+    } else if (slug.includes('server') || slug.includes('backup') || slug.includes('storage') || slug.includes('compute') || modelLower.includes('server') || modelLower.includes('tower')) {
+        // 2. SERVER (TOWER / RACK)
+        var chassis = new fabric.Rect({
+            width: 32,
+            height: 44,
+            fill: '#1e293b',
+            stroke: '#64748b',
+            strokeWidth: 2,
+            rx: 3,
+            ry: 3,
+            originX: 'center',
+            originY: 'center',
+            shadow: shadow
+        });
+        var bay1 = new fabric.Rect({ width: 22, height: 4, fill: '#334155', stroke: '#475569', strokeWidth: 0.5, top: -13, originX: 'center', originY: 'center' });
+        var bay2 = new fabric.Rect({ width: 22, height: 4, fill: '#334155', stroke: '#475569', strokeWidth: 0.5, top: -6, originX: 'center', originY: 'center' });
+        var bay3 = new fabric.Rect({ width: 22, height: 4, fill: '#334155', stroke: '#475569', strokeWidth: 0.5, top: 1, originX: 'center', originY: 'center' });
+        var pwrLed = new fabric.Circle({ radius: 2, fill: status === 'active' ? '#10b981' : '#f59e0b', top: 11, left: -6, originX: 'center', originY: 'center' });
+        var hddLed = new fabric.Circle({ radius: 1.5, fill: '#38bdf8', top: 11, left: 0, originX: 'center', originY: 'center' });
+        iconShapes = [chassis, bay1, bay2, bay3, pwrLed, hddLed];
+        badgeOffsetY = 30;
+
+    } else if (slug.includes('switch') || slug.includes('router') || modelLower.includes('switch') || modelLower.includes('smc')) {
+        // 3. SWITCH / ROUTER
+        var swBody = new fabric.Rect({
+            width: 52,
+            height: 24,
+            fill: '#0f172a',
+            stroke: '#0284c7',
+            strokeWidth: 2,
+            rx: 3,
+            ry: 3,
+            originX: 'center',
+            originY: 'center',
+            shadow: shadow
+        });
+        var swPorts = [];
+        for (var pi = -18; pi <= 18; pi += 6) {
+            swPorts.push(new fabric.Rect({ width: 4, height: 5, fill: '#1e293b', stroke: '#10b981', strokeWidth: 0.5, top: -2, left: pi, originX: 'center', originY: 'center' }));
+        }
+        var swText = new fabric.Text('SW', {
+            fontSize: 7,
+            fontFamily: 'sans-serif',
+            fontWeight: 'bold',
+            fill: '#38bdf8',
+            top: 6,
+            originX: 'center',
+            originY: 'center'
+        });
+        iconShapes = [swBody, ...swPorts, swText];
+        badgeOffsetY = 22;
+
+    } else if (slug.includes('ups') || slug.includes('power') || slug.includes('pdu') || modelLower.includes('ups')) {
+        // 4. UPS / POWER BACKUP
+        var upsBody = new fabric.Rect({
+            width: 32,
+            height: 44,
+            fill: '#0f172a',
+            stroke: '#f59e0b',
+            strokeWidth: 2,
+            rx: 3,
+            ry: 3,
+            originX: 'center',
+            originY: 'center',
+            shadow: shadow
+        });
+        var lcd = new fabric.Rect({ width: 20, height: 10, fill: '#064e3b', stroke: '#10b981', strokeWidth: 0.5, top: -10, originX: 'center', originY: 'center' });
+        var bolt = new fabric.Text('⚡ UPS', {
+            fontSize: 7,
+            fontFamily: 'sans-serif',
+            fontWeight: 'bold',
+            fill: '#fbbf24',
+            top: 6,
+            originX: 'center',
+            originY: 'center'
+        });
+        iconShapes = [upsBody, lcd, bolt];
+        badgeOffsetY = 30;
+
+    } else if (slug.includes('keystone') || slug.includes('outlet') || nameLower.includes('ks-') || nameLower.includes('پریز')) {
+        // 5. KEYSTONE / WALL OUTLET
+        var plate = new fabric.Rect({
+            width: 34,
+            height: 34,
+            fill: '#ffffff',
+            stroke: '#0284c7',
+            strokeWidth: 2,
+            rx: 4,
+            ry: 4,
+            originX: 'center',
+            originY: 'center',
+            shadow: shadow
+        });
+        var jack = new fabric.Rect({ width: 16, height: 12, fill: '#0f172a', stroke: '#38bdf8', strokeWidth: 1.5, rx: 2, ry: 2, top: -3, originX: 'center', originY: 'center' });
+        var pin = new fabric.Rect({ width: 10, height: 2.5, fill: '#fbbf24', top: -5, originX: 'center', originY: 'center' });
+        iconShapes = [plate, jack, pin];
+        badgeOffsetY = 24;
+
+    } else if (slug.includes('cctv') || slug.includes('camera')) {
+        // 6. CCTV CAMERA
+        var camBase = new fabric.Circle({ radius: 18, fill: '#f8fafc', stroke: '#475569', strokeWidth: 2, originX: 'center', originY: 'center', shadow: shadow });
+        var lens = new fabric.Circle({ radius: 10, fill: '#0f172a', originX: 'center', originY: 'center' });
+        var ir = new fabric.Circle({ radius: 4, fill: '#ef4444', originX: 'center', originY: 'center' });
+        iconShapes = [camBase, lens, ir];
+        badgeOffsetY = 26;
+
+    } else {
+        // 7. GENERIC DEVICE
+        var genBody = new fabric.Rect({
+            width: 36,
+            height: 36,
+            fill: '#334155',
+            stroke: '#64748b',
+            strokeWidth: 2,
+            rx: 4,
+            ry: 4,
+            originX: 'center',
+            originY: 'center',
+            shadow: shadow
+        });
+        var genText = new fabric.Text('DEV', { fontSize: 8, fontFamily: 'sans-serif', fontWeight: 'bold', fill: '#f8fafc', originX: 'center', originY: 'center' });
+        iconShapes = [genBody, genText];
+        badgeOffsetY = 26;
+    }
+
+    // --- LEGIBLE NAME BADGE PILL ---
+    var labelText = new fabric.Text(objectName, {
+        fontSize: 9,
+        fontFamily: 'sans-serif',
+        fontWeight: 'bold',
+        fill: '#0f172a',
+        originX: 'center',
+        originY: 'center',
+        top: badgeOffsetY
+    });
+
+    var badgeW = Math.max((labelText.width || 40) + 14, 50);
+    var labelBg = new fabric.Rect({
+        width: badgeW,
+        height: 18,
+        fill: '#ffffff',
+        stroke: '#94a3b8',
+        strokeWidth: 1,
+        rx: 4,
+        ry: 4,
+        originX: 'center',
+        originY: 'center',
+        top: badgeOffsetY,
+        shadow: new fabric.Shadow({
+            color: 'rgba(0, 0, 0, 0.15)',
+            blur: 3,
+            offsetX: 0,
+            offsetY: 1
+        })
+    });
+
+    var allObjects = [...iconShapes, labelBg, labelText];
+
+    var vpt = c.viewportTransform || [1, 0, 0, 1, 0, 0];
+    var zoom = c.getZoom() || 1;
+    var centerX = ((c.width / 2) - vpt[4]) / zoom;
+    var centerY = ((c.height / 2) - vpt[5]) / zoom;
+
+    var group = new fabric.Group(allObjects, {
+        left: centerX,
+        top: centerY,
+        originX: 'center',
+        originY: 'center',
+        hasRotatingPoint: true,
+        cornerSize: 10,
+        custom_meta: {
+            object_type: 'device',
+            object_id: parseInt(objectId),
+            object_name: objectName,
+            object_url: `/dcim/devices/${objectId}/interfaces/`
+        }
+    });
+
+    c.add(group);
+    c.setActiveObject(group);
+    c.renderAll();
+
+    var row = document.getElementById(`object_device_${objectId}`);
+    if (row) row.remove();
+
+    if (window._floorplan_loaded) {
+        save_floorplan();
+    }
+}
+window.add_custom_floorplan_device = add_custom_floorplan_device;
+
+
+function add_custom_floorplan_rack(rackId, rackName, status, width, depth, unit, roleName, color, uHeight) {
+    var c = window.fabricCanvas || (window.canvas && typeof window.canvas.getObjects === 'function' ? window.canvas : null);
+    if (!c && typeof canvas !== 'undefined') c = canvas;
+    if (!c) return;
+
+    var conversion_scale = 100;
+    var w = 60;
+    var h = 80;
+    if (width && depth) {
+        if (unit === "in") {
+            w = (width * 0.0254) * conversion_scale;
+            h = (depth * 0.0254) * conversion_scale;
+        } else {
+            w = (width / 1000) * conversion_scale;
+            h = (depth / 1000) * conversion_scale;
+        }
+    }
+    w = Math.max(Math.round(w), 50);
+    h = Math.max(Math.round(h), 65);
+
+    var shadow = new fabric.Shadow({
+        color: 'rgba(0, 0, 0, 0.3)',
+        blur: 6,
+        offsetX: 2,
+        offsetY: 2
+    });
+
+    var rackColor = color ? (color.startsWith('#') ? color : '#' + color) : '#2563eb';
+
+    // 1. Outer Frame
+    var outerFrame = new fabric.Rect({
+        width: w,
+        height: h,
+        fill: '#1e293b',
+        stroke: rackColor,
+        strokeWidth: 3,
+        rx: 3,
+        ry: 3,
+        originX: 'center',
+        originY: 'center',
+        shadow: shadow
+    });
+
+    // 2. Inner Bay
+    var innerBay = new fabric.Rect({
+        width: w - 12,
+        height: h - 14,
+        fill: '#0f172a',
+        stroke: '#475569',
+        strokeWidth: 1,
+        originX: 'center',
+        originY: 'center'
+    });
+
+    // 3. Door Marker
+    var doorLine = new fabric.Rect({
+        width: w - 8,
+        height: 3,
+        fill: rackColor,
+        top: -(h / 2) + 2,
+        originX: 'center',
+        originY: 'center'
+    });
+
+    // 4. Rack Name & U-Height text inside cabinet
+    var rackText = new fabric.Text(rackName + '\n(' + (uHeight || 'Rack') + ')', {
+        fontSize: 9,
+        fontFamily: 'sans-serif',
+        fontWeight: 'bold',
+        fill: '#ffffff',
+        textAlign: 'center',
+        originX: 'center',
+        originY: 'center'
+    });
+
+    // 5. External Legible Label Pill below rack
+    var labelBadgeText = new fabric.Text(rackName, {
+        fontSize: 10,
+        fontFamily: 'sans-serif',
+        fontWeight: 'bold',
+        fill: '#0f172a',
+        originX: 'center',
+        originY: 'center',
+        top: (h / 2) + 14
+    });
+
+    var badgeW = Math.max((labelBadgeText.width || 40) + 14, w);
+    var labelBg = new fabric.Rect({
+        width: badgeW,
+        height: 18,
+        fill: '#ffffff',
+        stroke: rackColor,
+        strokeWidth: 1.5,
+        rx: 4,
+        ry: 4,
+        originX: 'center',
+        originY: 'center',
+        top: (h / 2) + 14,
+        shadow: new fabric.Shadow({
+            color: 'rgba(0, 0, 0, 0.15)',
+            blur: 3,
+            offsetX: 0,
+            offsetY: 1
+        })
+    });
+
+    var allObjects = [outerFrame, innerBay, doorLine, rackText, labelBg, labelBadgeText];
+
+    var vpt = c.viewportTransform || [1, 0, 0, 1, 0, 0];
+    var zoom = c.getZoom() || 1;
+    var centerX = ((c.width / 2) - vpt[4]) / zoom;
+    var centerY = ((c.height / 2) - vpt[5]) / zoom;
+
+    var group = new fabric.Group(allObjects, {
+        left: centerX,
+        top: centerY,
+        originX: 'center',
+        originY: 'center',
+        hasRotatingPoint: true,
+        cornerSize: 10,
+        custom_meta: {
+            object_type: 'rack',
+            object_id: parseInt(rackId),
+            object_name: rackName,
+            object_url: `/dcim/racks/${rackId}/`
+        }
+    });
+
+    c.add(group);
+    c.setActiveObject(group);
+    c.renderAll();
+
+    var row = document.getElementById(`object_rack_${rackId}`);
+    if (row) row.remove();
+
+    save_floorplan();
+}
+window.add_custom_floorplan_rack = add_custom_floorplan_rack;
